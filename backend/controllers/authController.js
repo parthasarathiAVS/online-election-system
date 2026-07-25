@@ -1,40 +1,91 @@
 const bcrypt = require('bcryptjs');
-const jwt    = require('jsonwebtoken');
+const jwt = require('jsonwebtoken');
 const { Admin, Voter } = require('../models');
-const { logAction }    = require('../utils/auditLogger');
+const { logAction } = require('../utils/auditLogger');
 require('dotenv').config();
 
-// ── Admin Login ────────────────────────────────────────────────
+// ── Admin Login ───────────────────────────────────────────────
 exports.adminLogin = async (req, res) => {
   try {
     const { username, password } = req.body;
-    if (!username || !password)
-      return res.status(400).json({ message: 'Username and password are required.' });
 
-    const admin = await Admin.findOne({ where: { Username: username } });
-    if (!admin)
-      return res.status(401).json({ message: 'Invalid credentials.' });
+    console.log("========== ADMIN LOGIN ==========");
+    console.log("Login Request:", username);
+
+    if (!username || !password) {
+      return res.status(400).json({
+        message: "Username and password are required."
+      });
+    }
+
+    const admin = await Admin.findOne({
+      where: { Username: username }
+    });
+
+    console.log("Admin Found:", admin ? admin.Username : "NOT FOUND");
+
+    if (!admin) {
+      return res.status(401).json({
+        message: "Invalid credentials."
+      });
+    }
 
     const isMatch = await bcrypt.compare(password, admin.PasswordHash);
-    if (!isMatch)
-      return res.status(401).json({ message: 'Invalid credentials.' });
+
+    console.log("Password Match:", isMatch);
+
+    if (!isMatch) {
+      return res.status(401).json({
+        message: "Invalid credentials."
+      });
+    }
 
     const token = jwt.sign(
-      { id: admin.AdminID, role: 'admin', username: admin.Username },
+      {
+        id: admin.AdminID,
+        role: "admin",
+        username: admin.Username
+      },
       process.env.JWT_SECRET,
-      { expiresIn: process.env.JWT_EXPIRE }
+      {
+        expiresIn: process.env.JWT_EXPIRE
+      }
     );
 
-    await admin.update({ LastLogin: new Date() });
-    await logAction('Admin Login', { user: { id: admin.AdminID, role: 'admin' }, ip: req.ip }, `Admin "${admin.Username}" authenticated`);
-
-    res.json({
-      token,
-      user: { id: admin.AdminID, username: admin.Username, email: admin.Email, role: 'admin' }
+    await admin.update({
+      LastLogin: new Date()
     });
+
+    await logAction(
+      "Admin Login",
+      {
+        user: {
+          id: admin.AdminID,
+          role: "admin"
+        },
+        ip: req.ip
+      },
+      `Admin "${admin.Username}" authenticated`
+    );
+
+    console.log("Login Successful!");
+
+    return res.json({
+      token,
+      user: {
+        id: admin.AdminID,
+        username: admin.Username,
+        email: admin.Email,
+        role: "admin"
+      }
+    });
+
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: 'Server error during admin login.' });
+    console.error("Admin Login Error:", err);
+
+    return res.status(500).json({
+      message: "Server error during admin login."
+    });
   }
 };
 
