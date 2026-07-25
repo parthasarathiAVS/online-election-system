@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 const api = axios.create({
-  baseURL: 'https://online-election-system-9sx9.onrender.com'
+  baseURL: 'https://online-election-system-9sx9.onrender.com/api/auth/admin/login'
 });
 
 api.interceptors.request.use((config) => {
