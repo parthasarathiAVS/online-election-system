@@ -6,20 +6,25 @@ const sequelize = new Sequelize(
   process.env.DB_USER,
   process.env.DB_PASS,
   {
-    host:     process.env.DB_HOST,
-    port:     parseInt(process.env.DB_PORT) || 3306,
-    dialect:  'mysql',
-    logging:  process.env.NODE_ENV === 'development' ? console.log : false,
-    pool: {
-      max:     10,
-      min:     0,
-      acquire: 30000,
-      idle:    10000
+    host: process.env.DB_HOST,
+    port: Number(process.env.DB_PORT),
+    dialect: 'mysql',
+
+    logging: console.log,
+
+    dialectOptions: {
+      ssl: {
+        require: true,
+        rejectUnauthorized: false
+      },
+      connectTimeout: 60000
     },
-    define: {
-      charset:   'utf8mb4',
-      collate:   'utf8mb4_unicode_ci',
-      timestamps: true
+
+    pool: {
+      max: 5,
+      min: 0,
+      acquire: 60000,
+      idle: 10000
     }
   }
 );
