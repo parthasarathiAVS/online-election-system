@@ -1,13 +1,33 @@
 const sequelize = require('../config/database');
-const Admin     = require('./Admin');
-const Voter     = require('./Voter');
-const Election  = require('./Election');
+const College = require('./College');
+const SuperAdmin = require('./SuperAdmin');
+const CollegeAdmin = require('./CollegeAdmin');
+const Department = require('./Department');
+const Position = require('./Position');
+const Student = require('./Student');
+const Election = require('./Election');
 const Candidate = require('./Candidate');
-const Vote      = require('./Vote');
-const AuditLog  = require('./AuditLog');
+const Vote = require('./Vote');
+const AuditLog = require('./AuditLog');
 const CandidateVoteTotal = require('./CandidateVoteTotal');
+const Notification = require('./Notification');
 
 // ── Associations ──────────────────────────────
+College.hasMany(CollegeAdmin, { foreignKey: 'CollegeID', onDelete: 'CASCADE' });
+CollegeAdmin.belongsTo(College, { foreignKey: 'CollegeID' });
+
+College.hasMany(Department, { foreignKey: 'CollegeID', onDelete: 'CASCADE' });
+Department.belongsTo(College, { foreignKey: 'CollegeID' });
+
+College.hasMany(Position, { foreignKey: 'CollegeID', onDelete: 'CASCADE' });
+Position.belongsTo(College, { foreignKey: 'CollegeID' });
+
+College.hasMany(Student, { foreignKey: 'CollegeID', onDelete: 'CASCADE' });
+Student.belongsTo(College, { foreignKey: 'CollegeID' });
+
+College.hasMany(Election, { foreignKey: 'CollegeID', onDelete: 'CASCADE' });
+Election.belongsTo(College, { foreignKey: 'CollegeID' });
+
 Election.hasMany(Candidate, { foreignKey: 'ElectionID', onDelete: 'CASCADE' });
 Candidate.belongsTo(Election, { foreignKey: 'ElectionID' });
 
@@ -17,14 +37,16 @@ Vote.belongsTo(Election, { foreignKey: 'ElectionID' });
 Candidate.hasMany(Vote, { foreignKey: 'CandidateID', onDelete: 'CASCADE' });
 Vote.belongsTo(Candidate, { foreignKey: 'CandidateID' });
 
-Voter.hasMany(Vote, { foreignKey: 'VoterID', onDelete: 'SET NULL' });
-Vote.belongsTo(Voter, { foreignKey: 'VoterID' });
+Student.hasMany(Vote, { foreignKey: 'StudentID', onDelete: 'SET NULL' });
+Vote.belongsTo(Student, { foreignKey: 'StudentID' });
 
-// CandidateVoteTotal Associations
 Candidate.hasOne(CandidateVoteTotal, { foreignKey: 'CandidateID', onDelete: 'CASCADE' });
 CandidateVoteTotal.belongsTo(Candidate, { foreignKey: 'CandidateID' });
 
 Election.hasMany(CandidateVoteTotal, { foreignKey: 'ElectionID', onDelete: 'CASCADE' });
 CandidateVoteTotal.belongsTo(Election, { foreignKey: 'ElectionID' });
 
-module.exports = { sequelize, Admin, Voter, Election, Candidate, Vote, AuditLog, CandidateVoteTotal };
+module.exports = { 
+  sequelize, College, SuperAdmin, CollegeAdmin, Department, Position, 
+  Student, Election, Candidate, Vote, AuditLog, CandidateVoteTotal, Notification 
+};

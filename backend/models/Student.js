@@ -1,16 +1,23 @@
 const { DataTypes } = require('sequelize');
 const sequelize = require('../config/database');
 
-const Voter = sequelize.define('Voter', {
-  VoterID: {
+const Student = sequelize.define('Student', {
+  StudentID: {
     type: DataTypes.INTEGER,
     autoIncrement: true,
     primaryKey: true
   },
-  VoterRegistrationNumber: {
+  CollegeID: {
+    type: DataTypes.INTEGER,
+    allowNull: false
+  },
+  DepartmentID: {
+    type: DataTypes.INTEGER,
+    allowNull: true
+  },
+  RegistrationNumber: {
     type: DataTypes.STRING(50),
-    allowNull: false,
-    unique: true
+    allowNull: false
   },
   FullName: {
     type: DataTypes.STRING(120),
@@ -37,8 +44,14 @@ const Voter = sequelize.define('Voter', {
     defaultValue: false
   }
 }, {
-  tableName: 'Voters',
-  timestamps: true
+  tableName: 'Students',
+  timestamps: true,
+  indexes: [
+    {
+      unique: true,
+      fields: ['CollegeID', 'RegistrationNumber']
+    }
+  ]
 });
 
-module.exports = Voter;
+module.exports = Student;

@@ -7,6 +7,10 @@ const CandidateVoteTotal = sequelize.define('CandidateVoteTotal', {
     primaryKey: true, 
     allowNull: false 
   },
+  CollegeID: { 
+    type: DataTypes.INTEGER, 
+    allowNull: false 
+  },
   ElectionID: { 
     type: DataTypes.INTEGER, 
     allowNull: false 

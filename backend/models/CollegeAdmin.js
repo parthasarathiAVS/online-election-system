@@ -1,11 +1,15 @@
 const { DataTypes } = require('sequelize');
 const sequelize = require('../config/database');
 
-const Admin = sequelize.define('Admin', {
+const CollegeAdmin = sequelize.define('CollegeAdmin', {
   AdminID: {
     type: DataTypes.INTEGER,
     autoIncrement: true,
     primaryKey: true
+  },
+  CollegeID: {
+    type: DataTypes.INTEGER,
+    allowNull: false
   },
   Username: {
     type: DataTypes.STRING(50),
@@ -22,16 +26,16 @@ const Admin = sequelize.define('Admin', {
     unique: true
   },
   Role: {
-    type: DataTypes.ENUM('admin', 'superadmin'),
-    defaultValue: 'admin'
+    type: DataTypes.STRING,
+    defaultValue: 'CollegeAdmin'
   },
   LastLogin: {
     type: DataTypes.DATE,
     allowNull: true
   }
 }, {
-  tableName: 'Admins',
+  tableName: 'CollegeAdmins',
   timestamps: true
 });
 
-module.exports = Admin;
+module.exports = CollegeAdmin;
