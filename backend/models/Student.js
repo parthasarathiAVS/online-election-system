@@ -9,7 +9,7 @@ const Student = sequelize.define('Student', {
   },
   CollegeID: {
     type: DataTypes.INTEGER,
-    allowNull: false
+    allowNull: true   // null for self-registered students not yet linked
   },
   DepartmentID: {
     type: DataTypes.INTEGER,
@@ -17,15 +17,29 @@ const Student = sequelize.define('Student', {
   },
   RegistrationNumber: {
     type: DataTypes.STRING(50),
-    allowNull: false
+    allowNull: false,
+    unique: true
   },
   FullName: {
     type: DataTypes.STRING(120),
     allowNull: false
   },
+  CollegeName: {
+    type: DataTypes.STRING(200),
+    allowNull: true
+  },
+  Department: {
+    type: DataTypes.STRING(100),
+    allowNull: true
+  },
+  Year: {
+    type: DataTypes.STRING(20),
+    allowNull: true
+  },
   Email: {
     type: DataTypes.STRING(120),
-    allowNull: true
+    allowNull: true,
+    unique: true
   },
   Phone: {
     type: DataTypes.STRING(15),
@@ -34,6 +48,14 @@ const Student = sequelize.define('Student', {
   PasswordHash: {
     type: DataTypes.STRING(255),
     allowNull: false
+  },
+  ProfilePhoto: {
+    type: DataTypes.STRING(500),
+    allowNull: true
+  },
+  Role: {
+    type: DataTypes.STRING(20),
+    defaultValue: 'student'
   },
   Status: {
     type: DataTypes.ENUM('active', 'disabled'),
@@ -45,13 +67,8 @@ const Student = sequelize.define('Student', {
   }
 }, {
   tableName: 'Students',
-  timestamps: true,
-  indexes: [
-    {
-      unique: true,
-      fields: ['CollegeID', 'RegistrationNumber']
-    }
-  ]
+  timestamps: true
 });
 
 module.exports = Student;
+

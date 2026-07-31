@@ -9,7 +9,7 @@ const CollegeAdmin = sequelize.define('CollegeAdmin', {
   },
   CollegeID: {
     type: DataTypes.INTEGER,
-    allowNull: false
+    allowNull: true
   },
   Username: {
     type: DataTypes.STRING(50),

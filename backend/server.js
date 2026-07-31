@@ -21,6 +21,7 @@ const {
 const authRoutes = require('./routes/authRoutes');
 const adminRoutes = require('./routes/adminRoutes');
 const voterRoutes = require('./routes/voterRoutes');
+const studentRoutes = require('./routes/studentRoutes');
 
 
 const app = express();
@@ -116,6 +117,11 @@ app.use(
 app.use(
   "/api/voter",
   voterRoutes
+);
+
+app.use(
+  "/api/student",
+  studentRoutes
 );
 
 

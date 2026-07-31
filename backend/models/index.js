@@ -2,9 +2,11 @@ const sequelize = require('../config/database');
 const College = require('./College');
 const SuperAdmin = require('./SuperAdmin');
 const CollegeAdmin = require('./CollegeAdmin');
+const Admin = CollegeAdmin;  // backward-compat alias
 const Department = require('./Department');
 const Position = require('./Position');
 const Student = require('./Student');
+const Voter = require('./Voter');  // legacy voter model
 const Election = require('./Election');
 const Candidate = require('./Candidate');
 const Vote = require('./Vote');
@@ -47,6 +49,6 @@ Election.hasMany(CandidateVoteTotal, { foreignKey: 'ElectionID', onDelete: 'CASC
 CandidateVoteTotal.belongsTo(Election, { foreignKey: 'ElectionID' });
 
 module.exports = { 
-  sequelize, College, SuperAdmin, CollegeAdmin, Department, Position, 
-  Student, Election, Candidate, Vote, AuditLog, CandidateVoteTotal, Notification 
+  sequelize, College, SuperAdmin, CollegeAdmin, Admin, Department, Position, 
+  Student, Voter, Election, Candidate, Vote, AuditLog, CandidateVoteTotal, Notification 
 };

@@ -6,8 +6,10 @@ import { AuthProvider } from './context/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
 
 import Login from './pages/Login';
+import Register from './pages/Register';
 import AdminDashboard from './pages/AdminDashboard';
 import VoterDashboard from './pages/VoterDashboard';
+import StudentDashboard from './pages/StudentDashboard';
 import VotingBooth from './pages/VotingBooth';
 import KioskMode from './pages/KioskMode';
 import ResultsPrint from './pages/ResultsPrint';
@@ -21,6 +23,7 @@ function App() {
           <Routes>
             <Route path="/" element={<Navigate to="/login" replace />} />
             <Route path="/login" element={<Login />} />
+            <Route path="/register" element={<Register />} />
 
             {/* Admin Routes */}
             <Route path="/admin" element={<ProtectedRoute role="admin"><AdminDashboard /></ProtectedRoute>} />
@@ -29,7 +32,12 @@ function App() {
 
             {/* Voter Routes */}
             <Route path="/voter" element={<ProtectedRoute role="voter"><VoterDashboard /></ProtectedRoute>} />
-            <Route path="/voter/booth/:electionId" element={<ProtectedRoute role="voter"><VotingBooth /></ProtectedRoute>} />
+            
+            {/* Student Routes */}
+            <Route path="/student" element={<ProtectedRoute role="student"><StudentDashboard /></ProtectedRoute>} />
+            
+            {/* Shared Booth Route for Voter & Student roles */}
+            <Route path="/voter/booth/:electionId" element={<ProtectedRoute role={['voter', 'student']}><VotingBooth /></ProtectedRoute>} />
             
             <Route path="*" element={<Navigate to="/login" replace />} />
           </Routes>
