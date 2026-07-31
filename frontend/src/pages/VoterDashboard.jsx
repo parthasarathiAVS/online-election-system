@@ -45,9 +45,9 @@ const VoterDashboard = () => {
         zIndex: 100
       }}>
         <Box display="flex" alignItems="center" gap={2}>
-          <img src="/college_logo.png" alt="AVS College of Technology" style={{ height: 48, objectFit: 'contain' }} />
+          <img src="/logo.png" alt="VoteVerse AI" style={{ height: 48, objectFit: 'contain' }} />
           <Box>
-            <Typography variant="h6" fontWeight={800} color="#134E4A" sx={{ lineHeight: 1.2 }}>AVS College of Technology</Typography>
+            <Typography variant="h6" fontWeight={800} color="#134E4A" sx={{ lineHeight: 1.2 }}>VoteVerse AI</Typography>
             <Typography variant="caption" color="#475569" fontWeight={600}>
               Student: {user?.fullName} ({user?.voterRegistrationNumber})
             </Typography>

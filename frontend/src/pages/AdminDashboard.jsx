@@ -477,10 +477,10 @@ const AdminDashboard = () => {
       <Box sx={{ px: 4, py: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center',
         background: '#FFFFFF', borderBottom: '3px solid #0F766E', boxShadow: '0 4px 20px rgba(15,118,110,0.06)' }}>
         <Box display="flex" alignItems="center" gap={2}>
-          <img src="/college_logo.png" alt="AVS College of Technology" style={{ height: 48, objectFit: 'contain' }} />
+          <img src="/logo.png" alt="VoteVerse AI" style={{ height: 48, objectFit: 'contain' }} />
           <Box>
             <Typography variant="h6" fontWeight={800} sx={{ background: 'linear-gradient(135deg,#0F766E,#06B6D4)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', lineHeight: 1.2 }}>
-              AVS College of Technology
+              VoteVerse AI
             </Typography>
             <Typography variant="caption" color="#475569" sx={{ letterSpacing: 1, textTransform: 'uppercase', fontWeight: 600 }}>
               Campus Election Officer: {user?.username}

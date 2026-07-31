@@ -104,16 +104,16 @@ const Login = () => {
             {/* College Logo */}
             <Box sx={{ display: 'flex', justifyContent: 'center', mb: 2 }}>
               <img
-                src="/college_logo.png"
-                alt="AVS College of Technology"
-                style={{ height: 72, objectFit: 'contain' }}
+                src="/logo.png"
+                alt="VoteVerse AI"
+                style={{ height: 120, objectFit: 'contain' }}
               />
             </Box>
             <Typography variant="h5" fontWeight={800} color="#134E4A" sx={{ letterSpacing: -0.3, lineHeight: 1.2 }}>
-              AVS College of Technology
+              VoteVerse AI
             </Typography>
             <Typography variant="caption" color="#475569" fontWeight={500} mt={0.5} display="block">
-              Approved by AICTE | Affiliated to Anna University
+              One Student. One Vote. Complete Trust.
             </Typography>
             <Box sx={{ mt: 1.5, py: 0.6, px: 2, display: 'inline-block', borderRadius: 5, background: 'rgba(15, 118, 110, 0.08)' }}>
               <Typography variant="caption" color="#0F766E" fontWeight={600}>

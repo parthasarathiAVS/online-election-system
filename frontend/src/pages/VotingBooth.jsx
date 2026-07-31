@@ -265,7 +265,7 @@ const VotingBooth = () => {
         zIndex: 100
       }}>
         <Box display="flex" alignItems="center" gap={2}>
-          <img src="/college_logo.png" alt="AVS College of Technology" style={{ height: 44, objectFit: 'contain' }} />
+          <img src="/logo.png" alt="VoteVerse AI" style={{ height: 44, objectFit: 'contain' }} />
           <Box>
             <Typography variant="subtitle1" fontWeight={800} color="#134E4A" sx={{ lineHeight: 1.2 }}>SECURE VOTING BOOTH</Typography>
             <Typography variant="caption" color="#475569" fontWeight={600}>{election.Title}</Typography>
