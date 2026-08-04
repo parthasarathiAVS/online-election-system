@@ -30,6 +30,7 @@ router.get('/voters', adminController.getVoters);
 router.put('/voters/:id/status', adminController.toggleVoterStatus);
 
 // Kiosk Mode Voting
+router.post('/kiosk/verify-student', adminController.verifyStudentForKiosk);
 router.post('/kiosk/vote', adminController.kioskCastVote);
 
 // Results & Logs

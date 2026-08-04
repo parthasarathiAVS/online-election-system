@@ -23,10 +23,18 @@ const KioskMode = () => {
   const [votedIdx, setVotedIdx] = useState(-1);    // which candidate is blinking
   const [activeNumpadKey, setActiveNumpadKey] = useState(null);
 
+  // Student Verification state
+  const [verificationInput, setVerificationInput] = useState('');
+  const [pendingStudent, setPendingStudent] = useState(null);
+  const [verifiedStudent, setVerifiedStudent] = useState(null);
+  const [verificationError, setVerificationError] = useState('');
+  const [isVerifying, setIsVerifying] = useState(false);
+
   // Refs to avoid stale closures
   const evmLockedRef = useRef(false);
   const showReceiptRef = useRef(false);
   const candidatesRef = useRef([]);
+  const verifiedStudentRef = useRef(null);
   const countdownTimer = useRef(null);
   const numpadKeyTimer = useRef(null);
 
@@ -34,6 +42,7 @@ const KioskMode = () => {
   useEffect(() => { evmLockedRef.current = evmLocked; }, [evmLocked]);
   useEffect(() => { showReceiptRef.current = showReceipt; }, [showReceipt]);
   useEffect(() => { candidatesRef.current = candidates; }, [candidates]);
+  useEffect(() => { verifiedStudentRef.current = verifiedStudent; }, [verifiedStudent]);
 
   // ── Fetch data & setup ──────────────────────
   useEffect(() => {
@@ -59,9 +68,12 @@ const KioskMode = () => {
         confirmOfficerExit();
         return;
       }
+      if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) {
+        return;
+      }
       e.preventDefault(); // Block all keys in kiosk
 
-      if (evmLockedRef.current || showReceiptRef.current || candidatesRef.current.length === 0) return;
+      if (!verifiedStudentRef.current || evmLockedRef.current || showReceiptRef.current || candidatesRef.current.length === 0) return;
 
       const code = e.code;
       const numMap = { 
@@ -173,11 +185,93 @@ const KioskMode = () => {
     } catch (e) {}
   };
 
+  const playSuccessBeep = () => {
+    try {
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain); gain.connect(ctx.destination);
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(600, ctx.currentTime);
+      gain.gain.setValueAtTime(0.1, ctx.currentTime);
+      osc.start(ctx.currentTime);
+      osc.stop(ctx.currentTime + 0.1);
+      
+      const osc2 = ctx.createOscillator();
+      const gain2 = ctx.createGain();
+      osc2.connect(gain2); gain2.connect(ctx.destination);
+      osc2.type = 'sine';
+      osc2.frequency.setValueAtTime(800, ctx.currentTime + 0.1);
+      gain2.gain.setValueAtTime(0.1, ctx.currentTime + 0.1);
+      osc2.start(ctx.currentTime + 0.1);
+      osc2.stop(ctx.currentTime + 0.25);
+    } catch (e) {}
+  };
+
+  const playErrorBeep = () => {
+    try {
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain); gain.connect(ctx.destination);
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(150, ctx.currentTime);
+      gain.gain.setValueAtTime(0.2, ctx.currentTime);
+      osc.start(ctx.currentTime);
+      osc.stop(ctx.currentTime + 0.3);
+    } catch (e) {}
+  };
+
+  const resetEVM = () => {
+    if (countdownTimer.current) {
+      clearInterval(countdownTimer.current);
+      countdownTimer.current = null;
+    }
+    evmLockedRef.current = false;
+    showReceiptRef.current = false;
+    setEvmLocked(false);
+    setShowReceipt(false);
+    setVotedIdx(-1);
+    setVerifiedStudent(null);
+    setPendingStudent(null);
+    setVerificationInput('');
+    setVerificationError('');
+  };
+
+  const handleVerifyStudent = async (e) => {
+    e.preventDefault();
+    if (!verificationInput.trim()) return;
+
+    setIsVerifying(true);
+    setVerificationError('');
+    try {
+      const res = await api.post('/admin/kiosk/verify-student', {
+        electionId,
+        registrationNumber: verificationInput.trim()
+      });
+      setPendingStudent(res.data.student);
+      playSuccessBeep();
+    } catch (err) {
+      const msg = err.response?.data?.message || 'Verification failed';
+      setVerificationError(msg);
+      playErrorBeep();
+    } finally {
+      setIsVerifying(false);
+    }
+  };
+
+  const handleEnableBallot = () => {
+    if (!pendingStudent) return;
+    setVerifiedStudent(pendingStudent);
+    playSuccessBeep();
+  };
+
   // ── Cast Vote ───────────────────────────────
   const castVote = async (idx) => {
     if (evmLockedRef.current) return;
     const cands = candidatesRef.current;
     if (idx < 0 || idx >= cands.length) return;
+    if (!verifiedStudentRef.current) return;
 
     const c = cands[idx];
     evmLockedRef.current = true;
@@ -187,7 +281,11 @@ const KioskMode = () => {
     setVotedIdx(idx);
 
     try {
-      const res = await api.post('/admin/kiosk/vote', { electionId, candidateId: c.CandidateID });
+      const res = await api.post('/admin/kiosk/vote', { 
+        electionId, 
+        candidateId: c.CandidateID,
+        studentId: verifiedStudentRef.current.id
+      });
       setLastHash(res.data.receipt);
       setStats(s => ({ total: s.total + 1 }));
       playVoteBeat();
@@ -207,11 +305,7 @@ const KioskMode = () => {
           if (prev <= 1) {
             clearInterval(countdownTimer.current);
             countdownTimer.current = null;
-            evmLockedRef.current = false;
-            showReceiptRef.current = false;
-            setEvmLocked(false);
-            setShowReceipt(false);
-            setVotedIdx(-1);
+            resetEVM();
             return 0;
           }
           return prev - 1;
@@ -227,6 +321,172 @@ const KioskMode = () => {
   };
 
   if (!election) return <Box p={4} color="white">Loading EVM...</Box>;
+
+  // Student verification block
+  if (!verifiedStudent) {
+    return (
+      <Box sx={{ display: 'flex', flexDirection: 'column', background: 'linear-gradient(160deg,#020915 0%,#050f1f 50%,#030c18 100%)', minHeight: '100vh', userSelect: 'none' }}>
+        {/* Accent Bar */}
+        <Box sx={{ height: 6, background: 'linear-gradient(90deg, #0F766E 0%, #06B6D4 50%, #4338CA 100%)' }} />
+
+        {/* Header */}
+        <Box sx={{ p: '16px 32px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#0F172A', borderBottom: '4px solid #0F766E' }}>
+          <Box>
+            <Typography variant="h4" fontWeight={900} sx={{ letterSpacing: 1, color: '#FFFFFF' }}>🗳️ AVS CAMPUS ELECTRONIC VOTING SYSTEM</Typography>
+            <Typography variant="body2" sx={{ letterSpacing: 2, color: '#94A3B8', textTransform: 'uppercase' }}>
+              College Campus Election System — {election.Title}
+            </Typography>
+          </Box>
+          <Box textAlign="right" sx={{ minWidth: 140 }}>
+            <Typography variant="caption" sx={{ color: '#94A3B8', textTransform: 'uppercase', letterSpacing: 2 }}>Votes Cast</Typography>
+            <Typography variant="h3" color="#06B6D4" fontWeight={900}>{stats.total}</Typography>
+          </Box>
+        </Box>
+
+        {/* Center Panel */}
+        <Box sx={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', p: 3, position: 'relative', overflow: 'hidden' }}>
+          {/* Decorative background glows */}
+          <Box sx={{ position: 'absolute', top: '10%', left: '10%', width: 500, height: 500, borderRadius: '50%', background: 'radial-gradient(circle, rgba(15,118,110,0.08) 0%, transparent 60%)', pointerEvents: 'none' }} />
+          <Box sx={{ position: 'absolute', bottom: '10%', right: '10%', width: 500, height: 500, borderRadius: '50%', background: 'radial-gradient(circle, rgba(6,182,212,0.08) 0%, transparent 60%)', pointerEvents: 'none' }} />
+
+          {!pendingStudent ? (
+            /* Phase 1: Enter Registration Number */
+            <Box component="form" onSubmit={handleVerifyStudent} sx={{ maxWidth: 500, width: '100%', background: 'rgba(15,23,42,0.6)', backdropFilter: 'blur(16px)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '24px', p: 4, textAlign: 'center', boxShadow: '0 20px 40px rgba(0,0,0,0.4)', position: 'relative', zIndex: 1 }}>
+              <Box sx={{ display: 'inline-flex', p: 2, borderRadius: '50%', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', mb: 3 }}>
+                <Typography sx={{ color: '#ef4444', fontSize: '2rem', lineHeight: 1 }}>🔒</Typography>
+              </Box>
+
+              <Typography variant="h5" fontWeight={800} sx={{ color: '#FFFFFF', mb: 1 }}>EVM Control Unit Locked</Typography>
+              <Typography variant="body2" sx={{ color: '#94A3B8', mb: 4 }}>Election Officer supervision required. Please verify the student's Register Number to unlock the ballot unit.</Typography>
+
+              {verificationError && (
+                <Box sx={{ p: 2, mb: 3, borderRadius: '12px', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', textAlign: 'left' }}>
+                  <Typography variant="body2" sx={{ color: '#f87171', fontWeight: 600 }}>⚠️ {verificationError}</Typography>
+                </Box>
+              )}
+
+              <Typography variant="caption" sx={{ color: '#06B6D4', fontWeight: 800, letterSpacing: 1.5, textTransform: 'uppercase', mb: 1, display: 'block', textAlign: 'left' }}>
+                Student Register Number
+              </Typography>
+              <input
+                type="text"
+                value={verificationInput}
+                onChange={e => setVerificationInput(e.target.value)}
+                placeholder="Enter Register Number"
+                disabled={isVerifying}
+                autoFocus
+                style={{
+                  width: '100%',
+                  padding: '16px 20px',
+                  fontSize: '1.2rem',
+                  fontWeight: 700,
+                  letterSpacing: 1.5,
+                  textTransform: 'uppercase',
+                  color: '#FFFFFF',
+                  background: 'rgba(255,255,255,0.03)',
+                  border: '2px solid rgba(255,255,255,0.12)',
+                  borderRadius: '12px',
+                  outline: 'none',
+                  textAlign: 'center',
+                  marginBottom: '24px',
+                  transition: 'all 0.2s',
+                  boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.2)'
+                }}
+              />
+
+              <Button
+                type="submit"
+                disabled={isVerifying || !verificationInput.trim()}
+                variant="contained"
+                sx={{
+                  width: '100%', py: 1.8, fontSize: '1rem', fontWeight: 800, borderRadius: '12px',
+                  background: 'linear-gradient(135deg, #0F766E, #06B6D4)',
+                  boxShadow: '0 8px 24px rgba(6,182,212,0.3)',
+                  '&:hover': { background: 'linear-gradient(135deg, #115E59, #0891B2)' },
+                  '&:disabled': { background: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.3)' }
+                }}
+              >
+                {isVerifying ? 'VERIFYING...' : 'VERIFY STUDENT'}
+              </Button>
+            </Box>
+          ) : (
+            /* Phase 2: Show Verified Student Details & Unlock Button */
+            <Box sx={{ maxWidth: 520, width: '100%', background: 'rgba(15,23,42,0.6)', backdropFilter: 'blur(16px)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '24px', p: 4, textAlign: 'center', boxShadow: '0 20px 40px rgba(0,0,0,0.4)', position: 'relative', zIndex: 1 }}>
+              <Box sx={{ display: 'inline-flex', p: 2, borderRadius: '50%', background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.2)', mb: 3 }}>
+                <Typography sx={{ color: '#10b981', fontSize: '2rem', lineHeight: 1 }}>🟢</Typography>
+              </Box>
+
+              <Typography variant="h5" fontWeight={800} sx={{ color: '#FFFFFF', mb: 1 }}>Student Verified</Typography>
+              <Typography variant="body2" sx={{ color: '#94A3B8', mb: 3 }}>Please confirm student details before unlocking the EVM ballot unit.</Typography>
+
+              {/* Student Details Card */}
+              <Box sx={{
+                background: 'rgba(255,255,255,0.03)',
+                border: '1px solid rgba(255,255,255,0.08)',
+                borderRadius: '16px',
+                p: 3,
+                mb: 4,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 3,
+                textAlign: 'left'
+              }}>
+                <Avatar
+                  src={pendingStudent.profilePhoto || ''}
+                  sx={{
+                    width: 80, height: 80, fontSize: '2.5rem',
+                    border: '3px solid #06B6D4',
+                    background: 'rgba(6,182,212,0.1)'
+                  }}
+                >
+                  {!pendingStudent.profilePhoto && pendingStudent.fullName[0]}
+                </Avatar>
+                <Box>
+                  <Typography variant="h6" fontWeight={800} sx={{ color: '#FFFFFF' }}>{pendingStudent.fullName}</Typography>
+                  <Typography variant="body2" sx={{ color: '#06B6D4', fontWeight: 600, mt: 0.5 }}>Reg No: {pendingStudent.registrationNumber}</Typography>
+                  <Typography variant="body2" sx={{ color: '#94A3B8', mt: 0.5 }}>Dept: {pendingStudent.department || 'N/A'}</Typography>
+                </Box>
+              </Box>
+
+              <Box display="flex" gap={2}>
+                <Button
+                  onClick={() => { setPendingStudent(null); setVerificationInput(''); }}
+                  variant="outlined"
+                  sx={{ flex: 1, py: 1.5, borderRadius: '12px', borderColor: 'rgba(255,255,255,0.15)', color: '#94A3B8', '&:hover': { borderColor: '#ef4444', color: '#ef4444' } }}
+                >
+                  CANCEL
+                </Button>
+                <Button
+                  onClick={handleEnableBallot}
+                  variant="contained"
+                  sx={{
+                    flex: 2, py: 1.5, borderRadius: '12px',
+                    background: 'linear-gradient(135deg, #10B981, #059669)',
+                    boxShadow: '0 8px 24px rgba(16,185,129,0.3)',
+                    '&:hover': { background: 'linear-gradient(135deg, #059669, #047857)' }
+                  }}
+                >
+                  ENABLE BALLOT UNIT
+                </Button>
+              </Box>
+            </Box>
+          )}
+        </Box>
+
+        {/* Footer */}
+        <Box sx={{ p: '14px 32px', borderTop: '1px solid rgba(255,255,255,.08)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(10,37,64,.7)', flexWrap: 'wrap', gap: 1 }}>
+          <Box sx={{ display: 'flex', gap: 3, fontSize: '.78rem', color: 'text.secondary' }}>
+            <Box>🔑 Press <span style={{ color: '#FF9933', fontWeight: 800 }}>Ctrl+Shift+Esc</span> to exit Kiosk Mode</Box>
+          </Box>
+          <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+            <Box sx={{ px: 2, py: 0.5, borderRadius: 2, background: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.3)', fontSize: '.72rem', color: '#ef4444', fontWeight: 700 }}>
+              TERMINAL LOCKED — ACTION REQUIRED
+            </Box>
+          </Box>
+        </Box>
+      </Box>
+    );
+  }
 
   const len = candidates.length;
 
@@ -365,6 +625,31 @@ const KioskMode = () => {
                 <Typography variant="h1" sx={{ color: '#06B6D4', fontWeight: 900, fontSize: '4rem', lineHeight: 1 }}>{lockTimer}</Typography>
                 <Typography variant="caption" sx={{ color: '#94A3B8', mt: 1 }}>seconds</Typography>
               </Box>
+              <Box sx={{ mt: 3 }}>
+                <Button
+                  variant="outlined"
+                  onClick={resetEVM}
+                  sx={{
+                    borderColor: 'rgba(255,255,255,0.2)',
+                    color: '#94A3B8',
+                    textTransform: 'uppercase',
+                    fontSize: '0.8rem',
+                    fontWeight: 700,
+                    letterSpacing: 1.5,
+                    borderRadius: '12px',
+                    px: 3,
+                    py: 1,
+                    transition: 'all 0.2s',
+                    '&:hover': {
+                      borderColor: '#06B6D4',
+                      color: '#06B6D4',
+                      background: 'rgba(6,182,212,0.05)',
+                    }
+                  }}
+                >
+                  Skip & Lock Terminal
+                </Button>
+              </Box>
             </Box>
           </Box>
         </Box>
@@ -380,6 +665,13 @@ const KioskMode = () => {
             <Typography variant="body2" sx={{ letterSpacing: 2, color: '#94A3B8', textTransform: 'uppercase' }}>
               College Campus Election System — {election.Title}
             </Typography>
+            {verifiedStudent && (
+              <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 1, mt: 1, px: 2, py: 0.5, borderRadius: '12px', background: 'rgba(16,185,129,0.12)', border: '1px solid rgba(16,185,129,0.3)' }}>
+                <Typography sx={{ color: '#22c55e', fontSize: '0.75rem', fontWeight: 800, letterSpacing: 1, textTransform: 'uppercase' }}>
+                  🟢 BALLOT ENABLED — STUDENT: {verifiedStudent.fullName} ({verifiedStudent.registrationNumber})
+                </Typography>
+              </Box>
+            )}
           </Box>
           <Box textAlign="right" sx={{ minWidth: 140 }}>
             <Typography variant="caption" sx={{ color: '#94A3B8', textTransform: 'uppercase', letterSpacing: 2 }}>Votes Cast</Typography>
@@ -389,7 +681,7 @@ const KioskMode = () => {
       </Box>
 
       {/* ── Candidate Ballot List ── */}
-      <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', p: { xs: 2, md: 4 }, maxWidth: candidates.length > 5 ? 1400 : 900, width: '100%', mx: 'auto' }}>
+      <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', p: { xs: 2, md: 4 }, maxWidth: candidates.length > 5 ? 1400 : 1100, width: '100%', mx: 'auto' }}>
 
         {(() => {
           const useTwoCols = candidates.length > 5;
@@ -402,15 +694,23 @@ const KioskMode = () => {
             <Box sx={{ flex: 1 }}>
               {/* Table Header */}
               <Box sx={{
-                display: 'grid', gridTemplateColumns: '60px 65px 1fr 1fr 110px',
+                display: 'grid',
+                gridTemplateColumns: {
+                  xs: '45px 50px 1.2fr 1fr 1fr 60px 40px 90px',
+                  md: '60px 70px 1.5fr 1.2fr 1.2fr 80px 50px 120px'
+                },
+                alignItems: 'center',
                 p: useTwoCols ? '10px 14px' : '12px 20px', mb: 1, borderRadius: '12px 12px 0 0',
                 background: 'linear-gradient(135deg, #0F766E, #06B6D4)',
-                color: '#fff', fontWeight: 800, fontSize: '.75rem', letterSpacing: 2, textTransform: 'uppercase'
+                color: '#fff', fontWeight: 800, fontSize: '.75rem', letterSpacing: 1.5, textTransform: 'uppercase'
               }}>
                 <Typography sx={{ fontWeight: 800, fontSize: '.7rem' }}>No.</Typography>
-                <Typography sx={{ fontWeight: 800, fontSize: '.7rem' }}>Symbol</Typography>
+                <Typography sx={{ fontWeight: 800, fontSize: '.7rem' }}>Photo</Typography>
                 <Typography sx={{ fontWeight: 800, fontSize: '.7rem' }}>Candidate</Typography>
-                <Typography sx={{ fontWeight: 800, fontSize: '.7rem' }}>Party</Typography>
+                <Typography sx={{ fontWeight: 800, fontSize: '.7rem' }}>Department</Typography>
+                <Typography sx={{ fontWeight: 800, fontSize: '.7rem' }}>Position</Typography>
+                <Typography sx={{ fontWeight: 800, fontSize: '.7rem', textAlign: 'center' }}>Symbol</Typography>
+                <Typography sx={{ fontWeight: 800, fontSize: '.7rem', textAlign: 'center' }}>LED</Typography>
                 <Typography sx={{ fontWeight: 800, fontSize: '.7rem', textAlign: 'center' }}>Vote</Typography>
               </Box>
 
@@ -422,7 +722,11 @@ const KioskMode = () => {
 
                 return (
                   <Box key={cand.CandidateID} sx={{
-                    display: 'grid', gridTemplateColumns: '60px 65px 1fr 1fr 110px',
+                    display: 'grid',
+                    gridTemplateColumns: {
+                      xs: '45px 50px 1.2fr 1fr 1fr 60px 40px 90px',
+                      md: '60px 70px 1.5fr 1.2fr 1.2fr 80px 50px 120px'
+                    },
                     alignItems: 'center', p: useTwoCols ? '10px 14px' : '14px 20px',
                     background: isVoted
                       ? 'rgba(255,153,51,0.2)'
@@ -439,46 +743,77 @@ const KioskMode = () => {
                   }}>
                     {/* Number */}
                     <Box sx={{
-                      width: useTwoCols ? 36 : 42, height: useTwoCols ? 36 : 42, borderRadius: '10px',
+                      width: useTwoCols ? 32 : 42, height: useTwoCols ? 32 : 42, borderRadius: '10px',
                       background: isVoted ? '#FF9933' : 'rgba(255,255,255,0.06)',
                       border: `2px solid ${isVoted ? '#FF9933' : 'rgba(255,255,255,0.15)'}`,
                       display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      fontWeight: 900, fontSize: useTwoCols ? '1rem' : '1.2rem',
+                      fontWeight: 900, fontSize: useTwoCols ? '0.9rem' : '1.2rem',
                       color: isVoted ? '#fff' : '#FF9933'
                     }}>
                       {globalIdx + 1}
                     </Box>
 
-                    {/* Symbol / Photo */}
+                    {/* Photo */}
                     <Box sx={{
-                      width: useTwoCols ? 42 : 52, height: useTwoCols ? 42 : 52, borderRadius: '12px',
-                      border: `2px solid ${cand.Color || '#3b82f6'}55`,
+                      width: useTwoCols ? 40 : 54, height: useTwoCols ? 40 : 54, borderRadius: '50%',
+                      overflow: 'hidden', border: `2px solid ${cand.Color || '#3b82f6'}55`,
                       background: `${cand.Color || '#3b82f6'}15`,
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      fontSize: useTwoCols ? '1.4rem' : '1.8rem', overflow: 'hidden'
+                      display: 'flex', alignItems: 'center', justifyContent: 'center'
                     }}>
-                      {cand.PhotoURL
-                        ? <img src={cand.PhotoURL} alt={cand.FullName} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                        : cand.Symbol
-                      }
+                      {cand.PhotoURL ? (
+                        <img src={cand.PhotoURL} alt={cand.FullName} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      ) : (
+                        <Avatar sx={{ width: '100%', height: '100%', background: cand.Color || '#3b82f6', fontSize: useTwoCols ? '1rem' : '1.3rem', fontWeight: 800 }}>
+                          {cand.FullName[0]}
+                        </Avatar>
+                      )}
                     </Box>
 
                     {/* Name */}
-                    <Box>
-                      <Typography fontWeight={800} fontSize={useTwoCols ? '.95rem' : '1.1rem'} sx={{ lineHeight: 1.2 }}>{cand.FullName}</Typography>
+                    <Box sx={{ pr: 1 }}>
+                      <Typography fontWeight={800} fontSize={useTwoCols ? '.9rem' : '1.1rem'} sx={{ lineHeight: 1.2 }}>{cand.FullName}</Typography>
                       {cand.Manifesto && (
-                        <Typography variant="caption" color="text.secondary" sx={{ fontStyle: 'italic', opacity: 0.7 }}>
+                        <Typography variant="caption" color="text.secondary" sx={{ fontStyle: 'italic', opacity: 0.7, display: { xs: 'none', sm: 'block' } }}>
                           {cand.Manifesto.length > 30 ? cand.Manifesto.slice(0, 30) + '...' : cand.Manifesto}
                         </Typography>
                       )}
                     </Box>
 
-                    {/* Party */}
+                    {/* Department */}
                     <Box>
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <Box sx={{ width: 10, height: 10, borderRadius: '50%', background: cand.Color || '#3b82f6' }} />
-                        <Typography fontWeight={600} color="primary" fontSize={useTwoCols ? '.85rem' : '.95rem'}>{cand.Party}</Typography>
-                      </Box>
+                      <Typography fontWeight={600} color="#94A3B8" fontSize={useTwoCols ? '.8rem' : '.9rem'}>
+                        {cand.Department?.Name || (cand.Party && cand.Party.includes('/') ? cand.Party.split('/')[1].trim() : cand.Party || 'General')}
+                      </Typography>
+                    </Box>
+
+                    {/* Position */}
+                    <Box>
+                      <Typography fontWeight={600} color="#94A3B8" fontSize={useTwoCols ? '.8rem' : '.9rem'}>
+                        {cand.Position?.Title || 'Student Council'}
+                      </Typography>
+                    </Box>
+
+                    {/* Symbol */}
+                    <Box sx={{
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      fontSize: useTwoCols ? '1.3rem' : '1.8rem'
+                    }}>
+                      {cand.Symbol || '🗳️'}
+                    </Box>
+
+                    {/* EVM LED Status */}
+                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <Box sx={{
+                        width: 18, height: 18, borderRadius: '50%',
+                        background: isVoted ? '#EF4444' : '#3F3F46',
+                        boxShadow: isVoted ? '0 0 12px #EF4444, inset 0 0 4px #000' : 'inset 0 0 4px #000',
+                        border: '2px solid #27272A',
+                        animation: isVoted ? 'ledBlink 0.3s infinite alternate' : 'none',
+                        '@keyframes ledBlink': {
+                          from: { opacity: 0.4 },
+                          to: { opacity: 1 }
+                        }
+                      }} />
                     </Box>
 
                     {/* Vote Button */}
@@ -488,11 +823,11 @@ const KioskMode = () => {
                         disabled={evmLocked}
                         onClick={() => { highlightNumpadKey(globalIdx + 1); playSelectBeep(); setTimeout(() => castVote(globalIdx), 300); }}
                         sx={{
-                          minWidth: useTwoCols ? 90 : 110, py: useTwoCols ? 1 : 1.2, fontWeight: 800, fontSize: '.85rem',
-                          background: isVoted ? '#22c55e' : 'linear-gradient(135deg, #3b82f6, #2563eb)',
-                          borderRadius: '10px',
-                          boxShadow: isActive ? '0 0 16px rgba(59,130,246,0.5)' : 'none',
-                          '&:hover': { background: 'linear-gradient(135deg, #2563eb, #1d4ed8)', boxShadow: '0 4px 20px rgba(59,130,246,0.4)' },
+                          minWidth: useTwoCols ? 76 : 110, py: useTwoCols ? 0.8 : 1.2, fontWeight: 800, fontSize: '.85rem',
+                          background: isVoted ? '#22c55e' : 'linear-gradient(135deg, #10B981, #059669)',
+                          borderRadius: '8px',
+                          boxShadow: isActive ? '0 0 16px rgba(16,185,129,0.5)' : 'none',
+                          '&:hover': { background: 'linear-gradient(135deg, #059669, #047857)', boxShadow: '0 4px 20px rgba(16,185,129,0.4)' },
                           '&:disabled': { background: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.3)' }
                         }}
                       >

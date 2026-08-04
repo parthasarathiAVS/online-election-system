@@ -38,6 +38,8 @@ Vote.belongsTo(Election, { foreignKey: 'ElectionID' });
 
 Candidate.hasMany(Vote, { foreignKey: 'CandidateID', onDelete: 'CASCADE' });
 Vote.belongsTo(Candidate, { foreignKey: 'CandidateID' });
+Candidate.belongsTo(Department, { foreignKey: 'DepartmentID', as: 'Department' });
+Candidate.belongsTo(Position, { foreignKey: 'PositionID', as: 'Position' });
 
 Student.hasMany(Vote, { foreignKey: 'StudentID', onDelete: 'SET NULL' });
 Vote.belongsTo(Student, { foreignKey: 'StudentID' });

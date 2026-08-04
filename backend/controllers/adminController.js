@@ -2,7 +2,7 @@ const bcrypt   = require('bcryptjs');
 const crypto   = require('crypto');
 const path     = require('path');
 const { Op }   = require('sequelize');
-const { Election, Candidate, Voter, Vote, AuditLog, CandidateVoteTotal, sequelize } = require('../models');
+const { Election, Candidate, Voter, Vote, AuditLog, CandidateVoteTotal, sequelize, Student, College, Department, Position } = require('../models');
 const { logAction }     = require('../utils/auditLogger');
 const { generateExcel, updateLiveExcelFile } = require('../utils/excelExporter');
 
@@ -165,9 +165,17 @@ exports.getCandidates = async (req, res) => {
   try {
     const { electionId } = req.query;
     const where = electionId ? { ElectionID: electionId } : {};
-    const candidates = await Candidate.findAll({ where, order: [['DisplayOrder', 'ASC'], ['createdAt', 'ASC']] });
+    const candidates = await Candidate.findAll({
+      where,
+      include: [
+        { model: Department, as: 'Department', attributes: ['Name'] },
+        { model: Position, as: 'Position', attributes: ['Title'] }
+      ],
+      order: [['DisplayOrder', 'ASC'], ['createdAt', 'ASC']]
+    });
     res.json(candidates);
   } catch (err) {
+    console.error(err);
     res.status(500).json({ message: 'Error fetching candidates.' });
   }
 };
@@ -303,26 +311,102 @@ exports.getDashboardStats = async (req, res) => {
 //  KIOSK-MODE VOTING (No voter login needed)
 // ══════════════════════════════════════════════
 
+exports.verifyStudentForKiosk = async (req, res) => {
+  try {
+    const { electionId, registrationNumber } = req.body;
+    if (!electionId || !registrationNumber) {
+      return res.status(400).json({ message: 'Election ID and Registration Number are required.' });
+    }
+
+    const election = await Election.findByPk(electionId, {
+      include: [{ model: College }]
+    });
+
+    if (!election) {
+      return res.status(404).json({ message: 'Election not found.' });
+    }
+
+    if (!election.IsKioskMode) {
+      return res.status(400).json({ message: 'This election does not support kiosk mode.' });
+    }
+
+    if (election.Status !== 'Live') {
+      return res.status(400).json({ message: 'Election is not Live.' });
+    }
+
+    const student = await Student.findOne({
+      where: {
+        RegistrationNumber: registrationNumber.trim().toUpperCase()
+      }
+    });
+
+    if (!student) {
+      return res.status(404).json({ message: 'Student not found with this Registration Number.' });
+    }
+
+    if (student.Status === 'disabled') {
+      return res.status(403).json({ message: 'Student account is disabled.' });
+    }
+
+    let collegeMatches = false;
+    if (student.CollegeID && student.CollegeID === election.CollegeID) {
+      collegeMatches = true;
+    } else if (student.CollegeName && election.College && student.CollegeName.trim().toLowerCase() === election.College.Name.trim().toLowerCase()) {
+      collegeMatches = true;
+    }
+
+    if (!collegeMatches) {
+      return res.status(403).json({ message: 'Student is not registered for this college election.' });
+    }
+
+    if (student.HasVoted) {
+      return res.status(400).json({ message: 'Student has already voted in this election.' });
+    }
+
+    res.json({
+      message: 'Student verified successfully. Voting terminal unlocked.',
+      student: {
+        id: student.StudentID,
+        fullName: student.FullName,
+        registrationNumber: student.RegistrationNumber,
+        department: student.Department,
+        profilePhoto: student.ProfilePhoto
+      }
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Error verifying student.' });
+  }
+};
+
 exports.kioskCastVote = async (req, res) => {
   const t = await sequelize.transaction();
   try {
-    const { electionId, candidateId } = req.body;
-    if (!electionId || !candidateId) {
+    const { electionId, candidateId, studentId } = req.body;
+    if (!electionId || !candidateId || !studentId) {
       await t.rollback();
-      return res.status(400).json({ message: 'electionId and candidateId are required.' });
+      return res.status(400).json({ message: 'electionId, candidateId and studentId are required.' });
     }
 
     const election = await Election.findByPk(electionId, { transaction: t });
     if (!election) { await t.rollback(); return res.status(404).json({ message: 'Election not found.' }); }
 
     await autoUpdateStatus(election);
-    if (!election.IsKioskMode)
-      { await t.rollback(); return res.status(403).json({ message: 'This election does not support kiosk mode.' }); }
-    if (election.Status !== 'Live')
-      { await t.rollback(); return res.status(400).json({ message: 'Election is not Live.' }); }
+    if (!election.IsKioskMode) {
+      await t.rollback();
+      return res.status(403).json({ message: 'This election does not support kiosk mode.' });
+    }
+    if (election.Status !== 'Live') {
+      await t.rollback();
+      return res.status(400).json({ message: 'Election is not Live.' });
+    }
 
     const candidate = await Candidate.findOne({ where: { CandidateID: candidateId, ElectionID: electionId }, transaction: t });
     if (!candidate) { await t.rollback(); return res.status(404).json({ message: 'Candidate not found in this election.' }); }
+
+    const student = await Student.findByPk(studentId, { transaction: t });
+    if (!student) { await t.rollback(); return res.status(404).json({ message: 'Student not found.' }); }
+    if (student.HasVoted) { await t.rollback(); return res.status(403).json({ message: 'Student has already voted.' }); }
 
     const hashData = `KIOSK-${electionId}-${candidateId}-${Date.now()}-${Math.random()}`;
     const voteHash = crypto.createHmac('sha256', process.env.JWT_SECRET).update(hashData).digest('hex');
@@ -330,7 +414,7 @@ exports.kioskCastVote = async (req, res) => {
     const vote = await Vote.create({
       ElectionID:        electionId,
       CandidateID:       candidateId,
-      VoterID:           null,      // no voter login in kiosk mode
+      StudentID:         studentId,
       VoteTime:          new Date(),
       EncryptedVoteHash: voteHash,
       IsKioskVote:       true
@@ -342,9 +426,12 @@ exports.kioskCastVote = async (req, res) => {
       transaction: t
     });
 
+    // Mark student as having voted
+    await student.update({ HasVoted: true }, { transaction: t });
+
     await t.commit();
     updateLiveExcelFile(electionId); // Trigger real-time Excel sync in background
-    await logAction('Kiosk Vote Cast', req, `Candidate: "${candidate.FullName}" | Election: "${election.Title}" | Hash: ${voteHash.slice(0, 16)}…`);
+    await logAction('Kiosk Vote Cast', req, `Student ${student.RegistrationNumber} voted for "${candidate.FullName}" | Election: "${election.Title}" | Hash: ${voteHash.slice(0, 16)}…`);
 
     res.json({ message: 'Kiosk vote recorded successfully.', receipt: voteHash, voteId: vote.VoteID });
   } catch (err) {
